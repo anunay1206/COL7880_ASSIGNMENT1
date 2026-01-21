@@ -83,7 +83,7 @@ int main() {
     // ==================================================
 
     // test_small(orderBook);        // correctness
-    // test_medium(orderBook);    // moderate load
+     test_medium(orderBook);    // moderate load
     // test_large(orderBook);     // performance
     // test_contention(orderBook);// race-condition test
 
