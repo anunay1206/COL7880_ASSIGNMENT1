@@ -35,6 +35,7 @@ uint64_t unstuffBits(uint64_t packet) {
             if (consecutiveOnes == 5) {
                 consecutiveOnes = 0;
                 i++; 
+                continue;
             }
         } else {
             consecutiveOnes = 0;
