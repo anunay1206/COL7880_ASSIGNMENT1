@@ -1,4 +1,5 @@
 #include "functions.h"
+#include <omp.h>
 
 struct OrderBookEntry {
     uint32_t stockID;
@@ -128,6 +129,7 @@ void updateDisplay(const std::vector<uint64_t> &orderBook, int32_t freq) {
 int64_t totalAmountTraded(const std::vector<uint64_t> &orderBook) {
     int64_t total = 0;
     
+    #pragma omp parallel for reduction(+:total)
     for (uint64_t packet : orderBook) {
         uint64_t unstuffed = unstuffBits(packet);
         OrderBookEntry entry = decodePacket(unstuffed);
