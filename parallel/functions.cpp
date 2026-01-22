@@ -95,9 +95,14 @@ void updateDisplay(const std::vector<uint64_t> &orderBook, int32_t freq) {
         }
         
         if ((i + 1) % freq == 0 || i == orderBook.size() - 1) {
-            std::vector<StockInfo> stocks;
-            for (auto& pair : stockMap) {
-                stocks.push_back(pair.second);
+            std::vector<StockInfo> stocks(stockMap.size());
+            std::vector<std::pair<uint32_t, StockInfo>> temp (stockMap.begin(), stockMap.end());
+            
+            #pragma omp parallel for 
+
+            for (size_t i = 0; i<temp.size();i++)
+            {
+                stocks[i] = temp[i].second;
             }
             
             std::sort(stocks.begin(), stocks.end(), [](const StockInfo& a, const StockInfo& b) {
@@ -141,15 +146,22 @@ int64_t totalAmountTraded(const std::vector<uint64_t> &orderBook) {
 }
 
 void printOrderStats(const std::vector<uint64_t> &orderBook) {
-    std::map<uint32_t, StockInfo> stockMap;
-    
-    for (uint64_t packet : orderBook) {
-        uint64_t unstuffed = unstuffBits(packet);
+
+    int numThreads = omp_get_max_threads();
+    std::vector<std::map<uint32_t, StockInfo>> localMaps(numThreads);
+
+    #pragma omp parallel for 
+
+    for(size_t i = 0; i<orderBook.size();i++)
+    {
+        int tid = omp_get_thread_num();
+
+        uint64_t unstuffed = unstuffBits(orderBook[i]);
         OrderBookEntry entry = decodePacket(unstuffed);
-        
-        StockInfo& stock = stockMap[entry.stockID];
+
+        StockInfo &stock = localMaps[tid][entry.stockID];
         stock.stockID = entry.stockID;
-        
+
         if (entry.orderType) {
             stock.hasSellForMin = true;
             if (entry.orderValue < stock.minSellValue) {
@@ -166,10 +178,39 @@ void printOrderStats(const std::vector<uint64_t> &orderBook) {
         stock.orderCount++;
     }
     
+    std::map<uint32_t, StockInfo> finalMap;
+
+    for(int t=0;t<numThreads;t++)
+    {
+        for(auto &pair : localMaps[t])
+        {
+            uint32_t stockID = pair.first;
+            StockInfo &localStock = pair.second;
+            StockInfo &finalStock = finalMap[stockID];
+
+            finalStock.stockID = stockID;
+
+            if(localStock.hasSellForMin)
+            {
+                finalStock.hasSellForMin = true;
+                finalStock.minSellValue = std::min(finalStock.minSellValue, localStock.minSellValue);
+            }
+            if(localStock.hasBuyForMax)
+            {
+                finalStock.hasBuyForMax = true;
+                finalStock.maxBuyValue = std::max(finalStock.maxBuyValue, localStock.maxBuyValue);
+            }
+
+            finalStock.sumOrderValue += localStock.sumOrderValue;
+            finalStock.orderCount += localStock.orderCount;
+        }
+    }
+
+    
     std::ofstream outFile("stats.txt");
     outFile << std::fixed << std::setprecision(4);
     
-    for (auto& pair : stockMap) {
+    for (auto& pair : finalMap) {
         const StockInfo& stock = pair.second;
             
         double avgOrderValue = 0.0;

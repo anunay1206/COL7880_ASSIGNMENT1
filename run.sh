@@ -27,7 +27,7 @@ echo "------------------------------"
 SEQ_OUT=$(./sequential/seq)
 echo "$SEQ_OUT"
 
-SEQ_TIME=$(echo "$SEQ_OUT" | grep "Execution time" | awk '{print $4}')
+SEQ_TIME=$(echo "$SEQ_OUT" | grep "Total execution time" | awk '{print $5}')
 
 echo
 echo "Running Parallel (4 threads)..."
@@ -37,7 +37,7 @@ export OMP_NUM_THREADS=4
 PAR_OUT=$(./parallel/par)
 echo "$PAR_OUT"
 
-PAR_TIME=$(echo "$PAR_OUT" | grep "Execution time" | awk '{print $4}')
+PAR_TIME=$(echo "$PAR_OUT" | grep "Total execution time" | awk '{print $5}')
 
 echo
 echo "=============================="

@@ -5,11 +5,11 @@
 #include <chrono>
 
 // --------------------------------------------------
-// TEST CASE 1: SMALL / CORRECTNESS
+// TEST CASES
 // --------------------------------------------------
+
 void test_small(std::vector<uint64_t>& orderBook) {
     for (int i = 1; i <= 5; i++) {
-        // buy
         orderBook.push_back(
             (uint64_t)i |
             ((uint64_t)0 << 32) |
@@ -17,7 +17,6 @@ void test_small(std::vector<uint64_t>& orderBook) {
             ((uint64_t)(40 + i) << 41)
         );
 
-        // sell
         orderBook.push_back(
             (uint64_t)i |
             ((uint64_t)1 << 32) |
@@ -27,9 +26,6 @@ void test_small(std::vector<uint64_t>& orderBook) {
     }
 }
 
-// --------------------------------------------------
-// TEST CASE 2: MEDIUM WORKLOAD
-// --------------------------------------------------
 void test_medium(std::vector<uint64_t>& orderBook) {
     for (int i = 0; i < 100000; i++) {
         orderBook.push_back(
@@ -41,9 +37,6 @@ void test_medium(std::vector<uint64_t>& orderBook) {
     }
 }
 
-// --------------------------------------------------
-// TEST CASE 3: LARGE PERFORMANCE TEST
-// --------------------------------------------------
 void test_large(std::vector<uint64_t>& orderBook) {
     int N = 3'000'000;
 
@@ -57,13 +50,10 @@ void test_large(std::vector<uint64_t>& orderBook) {
     }
 }
 
-// --------------------------------------------------
-// TEST CASE 4: CONTENTION STRESS TEST
-// --------------------------------------------------
 void test_contention(std::vector<uint64_t>& orderBook) {
     for (int i = 0; i < 2'000'000; i++) {
         orderBook.push_back(
-            (uint64_t)1 |                      // same stock
+            (uint64_t)1 |
             ((uint64_t)(i % 2) << 32) |
             ((uint64_t)10 << 33) |
             ((uint64_t)(50 + (i % 20)) << 41)
@@ -74,53 +64,71 @@ void test_contention(std::vector<uint64_t>& orderBook) {
 // --------------------------------------------------
 // MAIN
 // --------------------------------------------------
+
 int main() {
 
     std::vector<uint64_t> orderBook;
 
-    // ==================================================
-    // CHOOSE EXACTLY ONE TEST CASE
-    // ==================================================
+    // ===============================
+    // CHOOSE ONE TEST CASE
+    // ===============================
 
-    // test_small(orderBook);        // correctness
-    test_medium(orderBook);    // moderate load
-    // test_large(orderBook);     // performance
-    // test_contention(orderBook);// race-condition test
+    // test_small(orderBook);
+    // test_medium(orderBook);
+    test_large(orderBook);
+    // test_contention(orderBook);
 
-    // ==================================================
+    int32_t freq = 100000;
 
-    int32_t freq = 100000;   // keep large for timing
+    // ===============================
+    // TOTAL PROGRAM TIMER
+    // ===============================
+    auto total_start = std::chrono::high_resolution_clock::now();
 
-    auto start = std::chrono::high_resolution_clock::now();
-
+    // -------------------------------
+    // updateDisplay timing
+    // -------------------------------
+    auto t1_start = std::chrono::high_resolution_clock::now();
     updateDisplay(orderBook, freq);
+    auto t1_end = std::chrono::high_resolution_clock::now();
+
+    // -------------------------------
+    // printOrderStats timing
+    // -------------------------------
+    auto t2_start = std::chrono::high_resolution_clock::now();
     printOrderStats(orderBook);
+    auto t2_end = std::chrono::high_resolution_clock::now();
+
+    // -------------------------------
+    // totalAmountTraded timing
+    // -------------------------------
+    auto t3_start = std::chrono::high_resolution_clock::now();
     int64_t total = totalAmountTraded(orderBook);
+    auto t3_end = std::chrono::high_resolution_clock::now();
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto total_end = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Total Amount Traded = " << total << "\n";
-    std::cout << "Execution time = "
-              << std::chrono::duration<double>(end - start).count()
-              << " seconds\n";
-     // -------- FUNCTION-WISE TIMING --------
-    auto t1 = std::chrono::high_resolution_clock::now();
-    updateDisplay(orderBook, freq);
-    auto t2 = std::chrono::high_resolution_clock::now();
+    // ===============================
+    // OUTPUT
+    // ===============================
 
-    printOrderStats(orderBook);
-    auto t3 = std::chrono::high_resolution_clock::now();
-
-    totalAmountTraded(orderBook);
-    auto t4 = std::chrono::high_resolution_clock::now();
+    std::cout << "Total Amount Traded = " << total << "\n\n";
 
     std::cout << "updateDisplay time      = "
-              << std::chrono::duration<double>(t2 - t1).count() << " s\n";
+              << std::chrono::duration<double>(t1_end - t1_start).count()
+              << " s\n";
 
     std::cout << "printOrderStats time    = "
-              << std::chrono::duration<double>(t3 - t2).count() << " s\n";
+              << std::chrono::duration<double>(t2_end - t2_start).count()
+              << " s\n";
 
     std::cout << "totalAmountTraded time  = "
-              << std::chrono::duration<double>(t4 - t3).count() << " s\n";
+              << std::chrono::duration<double>(t3_end - t3_start).count()
+              << " s\n\n";
+
+    std::cout << "Total execution time    = "
+              << std::chrono::duration<double>(total_end - total_start).count()
+              << " s\n";
+
     return 0;
 }
