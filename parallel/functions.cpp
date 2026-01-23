@@ -57,11 +57,14 @@ struct StockInfo {
     int64_t sumOrderValue;  
     int orderCount;         
     bool hasSellForMin;     
-    bool hasBuyForMax;      
+    bool hasBuyForMax;
+    int64_t lastSellTime;
+    int64_t lastBuyTime;
     
     StockInfo() : lastSellValue(0), lastBuyValue(0), 
                   minSellValue(255), maxBuyValue(0),
                   sumOrderValue(0), orderCount(0),
+                  lastSellTime(-1), lastBuyTime(-1),
                   hasSellForMin(false), hasBuyForMax(false) {}
     
     int getSpread() const {
@@ -70,51 +73,104 @@ struct StockInfo {
 };
 
 void updateDisplay(const std::vector<uint64_t> &orderBook, int32_t freq) {
-    std::map<uint32_t, StockInfo> stockMap;
-    int snapCount = 0;
-    
-    for (size_t i = 0; i < orderBook.size(); i++) {
-        uint64_t unstuffed = unstuffBits(orderBook[i]);
-        OrderBookEntry entry = decodePacket(unstuffed);
+    size_t n = orderBook.size();
+    int chunks = (n + freq - 1) / freq;
+    std:: vector<std:: map<uint32_t, StockInfo>> chunkState(chunks);
+
+
+    #pragma omp parallel for
+
+    for(int b = 0;b < chunks;b++)
+    {
+        size_t start = (size_t)b * freq;
+        size_t end = std::min(start + freq, n);
+
+        std::map<uint32_t, StockInfo>&localMap = chunkState[b];
         
-        StockInfo& stock = stockMap[entry.stockID];
-        stock.stockID = entry.stockID;
-        
-        if (entry.orderType) {
-            stock.lastSellValue = entry.orderValue;
-            stock.hasSellForMin = true;
-            if (entry.orderValue < stock.minSellValue) {
-                stock.minSellValue = entry.orderValue;
+        for(size_t i = start; i<end; i++)
+        {
+            uint64_t unstuffed = unstuffBits(orderBook[i]);
+            OrderBookEntry entry = decodePacket(unstuffed);
+
+            int64_t timestamp = i;
+
+            StockInfo &stock = localMap[entry.stockID];
+            stock.stockID = entry.stockID;
+
+            if(entry.orderType)
+            {
+                if(timestamp > stock.lastSellTime)
+                {
+                    stock.lastSellTime = timestamp;
+                    stock.lastSellValue = entry.orderValue;
+                }
+                stock.hasSellForMin = true;
+                stock.minSellValue = std :: min(stock.minSellValue, entry.orderValue);
             }
-        } else {
-            stock.lastBuyValue = entry.orderValue;
-            stock.hasBuyForMax = true;
-            if (entry.orderValue > stock.maxBuyValue) {
-                stock.maxBuyValue = entry.orderValue;
+            else{
+                if(timestamp > stock.lastBuyTime)
+                {
+                    stock.lastBuyTime = timestamp;
+                    stock.lastBuyValue = entry.orderValue;
+                }
+                stock.hasBuyForMax = true;
+                stock.maxBuyValue = std::max(stock.maxBuyValue, entry.orderValue);
             }
         }
-        
-        if ((i + 1) % freq == 0 || i == orderBook.size() - 1) {
-            std::vector<StockInfo> stocks(stockMap.size());
-            std::vector<std::pair<uint32_t, StockInfo>> temp (stockMap.begin(), stockMap.end());
-            
-            #pragma omp parallel for 
+    }
 
-            for (size_t i = 0; i<temp.size();i++)
+    std :: map<uint32_t,StockInfo> finalMap;
+
+    int snapCount = 0;
+    for(int b=0;b<chunks;b++)
+    {
+        for(auto &j : chunkState[b])
+        {
+            StockInfo &dest = finalMap[j.first];
+            dest.stockID = j.first;
+            StockInfo &src = j.second;
+
+            if(src.lastBuyTime>dest.lastBuyTime)
             {
-                stocks[i] = temp[i].second;
+                dest.lastBuyTime = src.lastBuyTime;
+                dest.lastBuyValue = src.lastBuyValue;
+            }
+
+            if(src.lastSellTime >dest.lastSellTime)
+            {
+                dest.lastSellTime = src.lastSellTime;
+                dest.lastSellValue = src.lastSellValue;
+            }
+
+            if(src.hasSellForMin)
+            {
+                dest.hasSellForMin = true;
+                dest.minSellValue = std::min(dest.minSellValue, src.minSellValue);
             }
             
-            std::sort(stocks.begin(), stocks.end(), [](const StockInfo& a, const StockInfo& b) {
-                int spreadA = a.getSpread();
-                int spreadB = b.getSpread();
-                if (spreadA != spreadB) {
-                    return spreadA > spreadB;
-                }
-                return a.stockID > b.stockID;
-            });
+            if(src.hasBuyForMax)
+            {
+                dest.hasBuyForMax = true;
+                dest.maxBuyValue = std::max(dest.maxBuyValue, src. maxBuyValue);
+            }
+        }
+
+        std::vector<StockInfo> stocks;
+        for (auto& pair : finalMap) {
+            stocks.push_back(pair.second);
+        }
+        
+        std::sort(stocks.begin(), stocks.end(), [](const StockInfo& a, const StockInfo& b) {
+            int spreadA = a.getSpread();
+            int spreadB = b.getSpread();
+            if (spreadA != spreadB) {
+                return spreadA > spreadB;
+            }
+            return a.stockID > b.stockID;
+        });
             
-            std::string filename = "snap_" + std::to_string(snapCount) + ".txt";
+            std::string filename =
+    OUTPUT_DIR + "/snap_" + std::to_string(snapCount++) + ".txt";
             std::ofstream outFile(filename);
             
             for (const auto& stock : stocks) {
@@ -126,8 +182,6 @@ void updateDisplay(const std::vector<uint64_t> &orderBook, int32_t freq) {
             }
             
             outFile.close();
-            snapCount++;
-        }
     }
 }
 
@@ -207,7 +261,7 @@ void printOrderStats(const std::vector<uint64_t> &orderBook) {
     }
 
     
-    std::ofstream outFile("stats.txt");
+    std::ofstream outFile(OUTPUT_DIR + "/stats.txt");
     outFile << std::fixed << std::setprecision(4);
     
     for (auto& pair : finalMap) {

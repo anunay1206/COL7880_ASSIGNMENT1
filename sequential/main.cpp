@@ -3,6 +3,13 @@
 #include <cstdint>
 #include <iostream>
 #include <chrono>
+#include <string>
+#include <filesystem>
+
+// ----------------------------------------------
+// OUTPUT DIRECTORY
+// ----------------------------------------------
+std::string OUTPUT_DIR = "sequential";   // change to "sequential" in seq
 
 // --------------------------------------------------
 // TEST CASES
@@ -67,6 +74,9 @@ void test_contention(std::vector<uint64_t>& orderBook) {
 
 int main() {
 
+    // ensure directory exists
+    std::filesystem::create_directories(OUTPUT_DIR);
+
     std::vector<uint64_t> orderBook;
 
     // ===============================
@@ -76,7 +86,7 @@ int main() {
     // test_small(orderBook);
     // test_medium(orderBook);
     test_large(orderBook);
-    // test_contention(orderBook);
+    //   test_contention(orderBook);
 
     int32_t freq = 100000;
 

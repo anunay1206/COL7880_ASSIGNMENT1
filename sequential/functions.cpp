@@ -108,8 +108,11 @@ void updateDisplay(const std::vector<uint64_t> &orderBook, int32_t freq) {
                 return a.stockID > b.stockID;
             });
             
-            std::string filename = "snap_" + std::to_string(snapCount) + ".txt";
+            std::string filename =
+    OUTPUT_DIR + "/snap_" + std::to_string(snapCount) + ".txt";
+
             std::ofstream outFile(filename);
+
             
             for (const auto& stock : stocks) {
                 int spread = stock.getSpread();
@@ -164,7 +167,7 @@ void printOrderStats(const std::vector<uint64_t> &orderBook) {
         stock.orderCount++;
     }
     
-    std::ofstream outFile("stats.txt");
+    std::ofstream outFile(OUTPUT_DIR + "/stats.txt");
     outFile << std::fixed << std::setprecision(4);
     
     for (auto& pair : stockMap) {
